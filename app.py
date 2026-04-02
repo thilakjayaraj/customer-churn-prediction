@@ -514,11 +514,20 @@ with tab2:
                     display_cols.append(f)
                     
             if not churners_df.empty:
+                top_50_df = churners_df.head(50)
+                st.markdown(f"#### 🔥 Top {len(top_50_df)} Highest Risk Customers")
                 st.dataframe(
-                    churners_df[display_cols].style.background_gradient(cmap="Reds", subset=["Churn_Probability_%"]),
+                    top_50_df[display_cols].style.background_gradient(cmap="Reds", subset=["Churn_Probability_%"]),
                     use_container_width=True,
                     hide_index=True
                 )
+                
+                with st.expander("View All High-Risk Customers"):
+                    st.dataframe(
+                        churners_df[display_cols].style.background_gradient(cmap="Reds", subset=["Churn_Probability_%"]),
+                        use_container_width=True,
+                        hide_index=True
+                    )
             else:
                 st.success("No high-risk customers found in this batch! 🎉")
 
