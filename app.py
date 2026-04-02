@@ -446,7 +446,8 @@ with tab2:
 
     if uploaded is not None:
         try:
-            batch_df = pd.read_csv(uploaded)
+            original_df = pd.read_csv(uploaded)
+            batch_df = original_df.copy()
 
             # Drop columns the pipeline doesn't need
             for drop_col in ["customerID", "Churn"]:
@@ -458,13 +459,13 @@ with tab2:
                 batch_df["TotalCharges"] = pd.to_numeric(batch_df["TotalCharges"], errors="coerce")
                 batch_df["TotalCharges"].fillna(batch_df["TotalCharges"].median(), inplace=True)
 
-            st.markdown(f"**Rows uploaded:** {len(batch_df)}")
+            st.markdown(f"**Rows uploaded:** {len(original_df)}")
 
             with st.spinner("Running predictions…"):
                 preds = pipeline.predict(batch_df)
                 probas = pipeline.predict_proba(batch_df)[:, 1]
 
-            result_df = batch_df.copy()
+            result_df = original_df.copy()
             result_df["Churn_Prediction"] = np.where(preds == 1, "Yes", "No")
             result_df["Churn_Probability_%"] = (probas * 100).round(2)
 
@@ -494,14 +495,49 @@ with tab2:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
+            # High-Risk Customers Section
+            st.markdown("---")
+            st.markdown(f"### 🚨 High-Risk Customers ({churn_count} exact matches)")
+            st.markdown("These are the specific customers predicted to leave the service. Immediate retention action is recommended.")
+            
+            churners_df = result_df[result_df["Churn_Prediction"] == "Yes"].sort_values(by="Churn_Probability_%", ascending=False)
+            
+            # Display customerID if available, else just indices
+            display_cols = ["Churn_Probability_%"]
+            if "customerID" in churners_df.columns:
+                display_cols.insert(0, "customerID")
+            
+            # Add some key features to display if available
+            key_features = ["Contract", "MonthlyCharges", "tenure"]
+            for f in key_features:
+                if f in churners_df.columns:
+                    display_cols.append(f)
+                    
+            if not churners_df.empty:
+                st.dataframe(
+                    churners_df[display_cols].style.background_gradient(cmap="Reds", subset=["Churn_Probability_%"]),
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.success("No high-risk customers found in this batch! 🎉")
+
+            st.markdown("---")
+            st.markdown("### 📋 Full Prediction Results")
+
             # Color the prediction column
             def highlight_churn(val):
                 if val == "Yes":
                     return "background-color: rgba(239,68,68,0.2); color: #fca5a5;"
                 return "background-color: rgba(34,197,94,0.2); color: #86efac;"
 
-            styled = result_df.style.applymap(highlight_churn, subset=["Churn_Prediction"])
-            st.dataframe(styled, use_container_width=True, height=400)
+            # Pandas version fallback
+            try:
+                styled = result_df.style.map(highlight_churn, subset=["Churn_Prediction"])
+            except AttributeError:
+                styled = result_df.style.applymap(highlight_churn, subset=["Churn_Prediction"])
+                
+            st.dataframe(styled, use_container_width=True, height=300)
 
             # Download button
             csv_out = result_df.to_csv(index=False).encode("utf-8")
